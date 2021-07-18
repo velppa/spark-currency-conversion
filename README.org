@@ -35,23 +35,25 @@ subgraph cluster_Rates{
 }
 
 {
-  TransactionsDump [shape=cylinder]
+  Transactions [shape=cylinder]
   TransactionsEnriched [shape=cylinder]
-  BulkTransactionProcessing [shape=component; color=6]
-  StreamingTransactionProcessing [shape=component; color=6]
+  TransactionsTopic [label="TransactionEnrichedStream"]
+
+  TransacrionEnricherBatch [shape=component; color=6]
+  TransacrionEnricherStream [shape=component; color=6]
 }
 
 RatesStorage -> RatesLoader [label="previous   "]
 FXRatesProvider -> RatesLoader [label="increment   "]
 RatesLoader -> RatesStorage [label="new   "]
 
-TransactionsDump -> BulkTransactionProcessing
-RatesStorage -> BulkTransactionProcessing
-BulkTransactionProcessing -> TransactionsEnriched
+Transactions -> TransactionEnricherBatch
+RatesStorage -> TransactionEnricherBatch
+TransactionEnricherBatch -> TransactionsEnriched
 
-TransactionStream -> StreamingTransactionProcessing
-RatesStorage -> StreamingTransactionProcessing
-StreamingTransactionProcessing -> TransactionsTopic
+TransactionStream -> TransacrionEnricherStream
+RatesStorage -> TransacrionEnricherStream
+TransacrionEnricherStream -> TransactionsTopic
 }
 
 #+end_src
@@ -173,7 +175,77 @@ export CURRENCYLAYER_API_KEY="fbc......"
 make load-rates
 #+end_src
 
-** Buik loading
+** Building and starting Spark Master
 
+To build a jar, use:
+
+#+begin_src sh
+sbt clean compile assembly
+#+end_src
+
+To start a Spark Master use:
+
+#+begin_src sh
+spark-shell
+#+end_src
+
+** Enrichment logic
+
+It takes transactions DataFrame and rates DataFrame and joins them by
+=currency= and =effective_from= columns. The logic is shared between
+bulk and stream processing.
+
+The implementation is provided in =Enricher.withAmountUSD= method.
+
+** Batch processing
+
+It takes two files as input, constructs DataFrames out of them and runs
+enrichment and saves results into a file.
+
+To launch the processing:
+
+#+begin_src sh
+make run-batch OUTPUT_DIR=results/batch
+#+end_src
+
+
+** Stream processing
+
+It takes a file with rates as input and a directory where csv files
+will be written, files are processed as a stream.
+
+#+begin_src sh
+make run-stream OUTPUT_DIR=results/stream
+#+end_src
+
+then in another window generate files:
+
+#+begin_src sh
+head -n 250 transactions.csv > stream/1.csv
+sleep 1
+head -n 100 transactions.csv > stream/2.csv
+sleep 2
+head -n 1000 transactions.csv > stream/3.csv
+sleep 3
+head -n 50 transactions.csv > stream/4.csv
+#+end_src
+
+#+RESULTS:
 
 * Look back
+
+There are many things missing before the solution is production ready:
+
+- For streaming it's necessary to build reading of FX rates
+- Change the logic from inner join to left join and divert rows where
+  rate is null to a separate location for monitoring/future analysis
+- Add tests
+- Probably in Streaming mode instead of files we should read/write to
+  Kafka topics
+- Performance testing, it's not guaranteed that the solution will
+  satisfy requirements 10ms/record for streaming
+- Probably it would be better to rewrite to type-safe Datasets
+- Parametrise interval for calculating validity windows for exchange
+  rates
+- Add DQ checks for incoming transactions
+- Add monitoring/CI/CD
