@@ -28,19 +28,22 @@ and establish validity intervals along the time axis.
 digraph CurrencyConversion {
 node[colorscheme=paired8]
 
-{
+subgraph cluster_Rates{
+  style=invis
   RatesStorage [shape=cylinder]
+  RatesLoader [shape=component; color=6]
+}
+
+{
   TransactionsDump [shape=cylinder]
   TransactionsEnriched [shape=cylinder]
-
-  RatesLoader [shape=component; color=6]
   BulkTransactionProcessing [shape=component; color=6]
   StreamingTransactionProcessing [shape=component; color=6]
 }
 
-RatesStorage -> RatesLoader [label="previous data"]
-FXRatesProvider -> RatesLoader [label="increment"]
-RatesLoader -> RatesStorage [label="new data"]
+RatesStorage -> RatesLoader [label="previous   "]
+FXRatesProvider -> RatesLoader [label="increment   "]
+RatesLoader -> RatesStorage [label="new   "]
 
 TransactionsDump -> BulkTransactionProcessing
 RatesStorage -> BulkTransactionProcessing
@@ -48,8 +51,7 @@ BulkTransactionProcessing -> TransactionsEnriched
 
 TransactionStream -> StreamingTransactionProcessing
 RatesStorage -> StreamingTransactionProcessing
-
-StreamingTransactionProcessing -> TrasnactionsTopic
+StreamingTransactionProcessing -> TransactionsTopic
 }
 
 #+end_src
@@ -120,29 +122,26 @@ currencies = 180
 years_of_operation = 50
 interval_length_days = 1/28.0
 records = round(currencies * years_of_operation * 365 * interval_length_days)
-bytes_per_record = 3 + 8
+bytes_per_record = 3 + 8*4 # one 3-char string and 4 numbers 8 bytes each
 
 return {"records": records, "bytes": bytes_per_record*records}
 #+end_src
 
 #+RESULTS:
-: {'records': 117321, 'bytes': 1290531}
+: {'records': 117321, 'bytes': 4106235}
 
-Then the process which does currency exchange rates conversion loads
-the whole file in memory.
+So, the file with exchange rates would be tiny in comparison to
+transactions, so we can load the whole file in memory (hash-map) and
+experience O(1) access time.
 
-#+begin_src restclient
-:api-key := (getenv "CURRENCYLAYER_API_KEY")
-GET http://api.currencylayer.com/live?access_key=:api-key
-#+end_src
-
-** Commands
-
-See defined tasks:
-#+begin_src sh
-sbt tasks
-#+end_src
-
+For bulk processing, we'd load the file at startup time of the job,
+for streaming processing we load the file at startup and also
+subscribe to the topic with notifications that rates file is updated.
+Upon receiving a notification, we load a new file into a temporary
+buffer, then pause execution and atomically switch old hash-map to a
+new buffer. I'm not sure how to do that in Spark Structured Streaming,
+but in Go I'd use =map= with =sync.RWMutex{}= and lock the mutex for
+writing when switching.
 
 * Carry out the plan
 
