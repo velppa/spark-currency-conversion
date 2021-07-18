@@ -145,6 +145,7 @@ new buffer. I'm not sure how to do that in Spark Structured Streaming,
 but in Go I'd use =map= with =sync.RWMutex{}= and lock the mutex for
 writing when switching.
 
+
 * Carry out the plan
 
 ** Install dependencies
@@ -154,6 +155,32 @@ writing when switching.
   #+begin_src sh
 brew install clojure/tools/clojure
   #+end_src
+
+- Spark
+
+  #+begin_src sh
+brew install apache-spark
+  #+end_src
+
+- Scala
+
+  #+begin_src sh
+brew install scala@2.12
+  #+end_src
+
+  Then add =/opt/homebrew/opt/scala@2.12/bin= to =PATH=.
+
+- Java
+
+  #+begin_src sh
+brew install java
+  #+end_src
+
+- sbt
+
+  I manually downloaded from [[https://www.scala-sbt.org][sbt' website]] and unpacked to =/opt/sbt=
+  since the version in brew doesn't support my MacBook M1.
+  Add =/opt/sbt/bin= to =PATH=.
 
 ** Rates Loader
 
@@ -166,7 +193,7 @@ On this stage in the production implementation we ensure data quality,
 but we put it out of scope.
 
 An example implementation is provided in Clojure under
-=src/main/clojure/rates.clj=.
+[[src/main/clojure/rates.clj]].
 
 To populate =rates.csv= file run:
 
@@ -174,6 +201,9 @@ To populate =rates.csv= file run:
 export CURRENCYLAYER_API_KEY="fbc......"
 make load-rates
 #+end_src
+
+I back-filled the history of exchange rates for 40 periods of 28 days
+back from today.
 
 ** Building and starting Spark Master
 
@@ -205,9 +235,8 @@ enrichment and saves results into a file.
 To launch the processing:
 
 #+begin_src sh
-make run-batch OUTPUT_DIR=results/batch
+make run-batch
 #+end_src
-
 
 ** Stream processing
 
@@ -215,10 +244,10 @@ It takes a file with rates as input and a directory where csv files
 will be written, files are processed as a stream.
 
 #+begin_src sh
-make run-stream OUTPUT_DIR=results/stream
+make run-stream | grep -v InMemoryFileIndex
 #+end_src
 
-then in another window generate files:
+then in another shell generate files:
 
 #+begin_src sh
 head -n 250 transactions.csv > stream/1.csv
@@ -236,6 +265,7 @@ head -n 50 transactions.csv > stream/4.csv
 
 There are many things missing before the solution is production ready:
 
+- Use a binary file format with embedded schema, like Parquet
 - For streaming it's necessary to build reading of FX rates
 - Change the logic from inner join to left join and divert rows where
   rate is null to a separate location for monitoring/future analysis
