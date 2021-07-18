@@ -26,17 +26,21 @@ and establish validity intervals along the time axis.
 #+begin_src dot :file assets/flow.svg :exports results
 
 digraph CurrencyConversion {
+node[colorscheme=paired8]
+
 {
   RatesStorage [shape=cylinder]
   TransactionsDump [shape=cylinder]
   TransactionsEnriched [shape=cylinder]
 
-  RatesLoader [shape=component]
-  BulkTransactionProcessing [shape=component]
-  StreamingTransactionProcessing [shape=component]
+  RatesLoader [shape=component; color=6]
+  BulkTransactionProcessing [shape=component; color=6]
+  StreamingTransactionProcessing [shape=component; color=6]
 }
 
-FXRatesProvider -> RatesLoader -> RatesStorage
+RatesStorage -> RatesLoader [label="previous data"]
+FXRatesProvider -> RatesLoader [label="increment"]
+RatesLoader -> RatesStorage [label="new data"]
 
 TransactionsDump -> BulkTransactionProcessing
 RatesStorage -> BulkTransactionProcessing
@@ -53,12 +57,15 @@ StreamingTransactionProcessing -> TrasnactionsTopic
 #+RESULTS:
 [[file:assets/flow.svg]]
 
+Red nodes are in scope of this assignment.
+
 ** Loading exchange rates
 
 Exchange rates are loaded from an external provider at some infrequent
 schedule (say every month), reshaped to our model and stored somewhere
 durably. The easiest way is to use cloud object storage service like
-Amazon S3.
+Amazon S3, which gives durability, versioning and notifications about
+changes.
 
 The file would contain exchange rates from a currency to some base
 currency like USD or EUR for a few hundreds of currencies.
@@ -108,7 +115,7 @@ Let's use CSV format with the following schema:
 
 We can estimate the number of records in the rates file:
 
-#+begin_src python :results verbatim :output both
+#+begin_src python :results verbatim :exports both
 currencies = 180
 years_of_operation = 50
 interval_length_days = 1/28.0
@@ -129,7 +136,6 @@ the whole file in memory.
 GET http://api.currencylayer.com/live?access_key=:api-key
 #+end_src
 
-
 ** Commands
 
 See defined tasks:
@@ -139,5 +145,36 @@ sbt tasks
 
 
 * Carry out the plan
+
+** Install dependencies
+
+- Clojure, refer to [[https://clojure.org/guides/getting_started#_installation_on_mac_via_homebrew][Installation on Mac via Homebrew]]:
+
+  #+begin_src sh
+brew install clojure/tools/clojure
+  #+end_src
+
+** Rates Loader
+
+It takes previous data and an increment (new rates), transforms
+increment into target schema, filters out from previous data records
+with =effective_from= equals to increment's =effective_from= and
+appends increment to previous data and writes to rates storage.
+
+On this stage in the production implementation we ensure data quality,
+but we put it out of scope.
+
+An example implementation is provided in Clojure under
+=src/main/clojure/rates.clj=.
+
+To populate =rates.csv= file run:
+
+#+begin_src sh
+export CURRENCYLAYER_API_KEY="fbc......"
+make load-rates
+#+end_src
+
+** Buik loading
+
 
 * Look back

@@ -31,6 +31,9 @@ object MainJob extends LazyLogging {
   val rateSchema = new StructType()
       .add("currency",StringType,true)
       .add("rate",DoubleType,true)
+      .add("created_at",IntegerType,true)
+      .add("effective_from",IntegerType,true)
+      .add("effective_to",IntegerType,true)
 
   def main(args: Array[String]): Unit = {
     logger.debug(this.getClass.toString)
@@ -61,10 +64,15 @@ object MainJob extends LazyLogging {
       transactions.show
       rates.show
 
+      val interval = 4 * 7 * 24 * 60 * 60
+
       transactions
-        .join(rates, "currency")
+        .withColumn("effective_from", col("timestamp") - col("timestamp") % lit(interval))
+        .join(rates, Seq("currency", "effective_from"))
         .withColumn("amount_usd", col("amount")*col("rate"))
-        .drop("amount", "rate")
+        .withColumnRenamed("rate", "fx")
+        .withColumnRenamed("effective_from", "fx_from")
+        .drop("effective_to", "created_at")
         .show
     }
     finally {

@@ -1,1 +1,9 @@
-{}
+{:paths ["src/main/clojure"]
+
+
+ :deps {
+        org.clojure/tools.cli {:mvn/version "1.0.206"}
+        org.clojure/clojure {:mvn/version "1.10.3"}
+        http-kit/http-kit {:mvn/version "2.5.0"}
+        cheshire/cheshire {:mvn/version "5.10.0"}}
+ }
