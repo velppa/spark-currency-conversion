@@ -29,9 +29,8 @@ object MainJob extends LazyLogging {
       .add("amount",DoubleType,true)
 
   val rateSchema = new StructType()
-      .add("target",StringType,true)
+      .add("currency",StringType,true)
       .add("rate",DoubleType,true)
-
 
   def main(args: Array[String]): Unit = {
     logger.debug(this.getClass.toString)
@@ -61,6 +60,12 @@ object MainJob extends LazyLogging {
 
       transactions.show
       rates.show
+
+      transactions
+        .join(rates, "currency")
+        .withColumn("amount_usd", col("amount")*col("rate"))
+        .drop("amount", "rate")
+        .show
     }
     finally {
       spark.close()

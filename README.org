@@ -1,237 +1,101 @@
 #+TITLE: Currency conversion using Spark
 
+* Understanding the problem
 
-* Loading exchange rates
+The challenge is to convert amount values for incoming incoming
+transactions from transaction's currency to USD.
 
-Exchange rates are loaded from external provider at some infrequent
+The conversion is a multiplication operation =amount_usd = amount *
+rate_curr_usd=.
+
+There are those constraints to care about:
+1. Use a monthly updating FX rate based on the timestamp of each
+   transaction.
+2. The conversion should work for real-time (<50 ms) as well as batch
+   (> 100M rows) transactions.
+3. The real-time and batch conversion function should be identical,
+   i.e. same inputs produce same outputs.
+
+* Create a plan
+
+Obtaining exchange rates from third parties should be independent
+from using those rates in transaction processing. At this stage
+we ensure the data quality, reshape rates into our internal model
+and establish validity intervals along the time axis.
+
+#+begin_src dot :file assets/flow.svg :exports results
+
+digraph CurrencyConversion {
+{
+  RatesStorage [shape=cylinder]
+  TransactionsDump [shape=cylinder]
+  TransactionsEnriched [shape=cylinder]
+
+  RatesLoader [shape=component]
+  BulkTransactionProcessing [shape=component]
+  StreamingTransactionProcessing [shape=component]
+}
+
+FXRatesProvider -> RatesLoader -> RatesStorage
+
+TransactionsDump -> BulkTransactionProcessing
+RatesStorage -> BulkTransactionProcessing
+BulkTransactionProcessing -> TransactionsEnriched
+
+TransactionStream -> StreamingTransactionProcessing
+RatesStorage -> StreamingTransactionProcessing
+
+StreamingTransactionProcessing -> TrasnactionsTopic
+}
+
+#+end_src
+
+#+RESULTS:
+[[file:assets/flow.svg]]
+
+** Loading exchange rates
+
+Exchange rates are loaded from an external provider at some infrequent
 schedule (say every month), reshaped to our model and stored somewhere
 durably. The easiest way is to use cloud object storage service like
 Amazon S3.
 
 The file would contain exchange rates from a currency to some base
-currency like USD or EUR for few hundreds of currencies.
+currency like USD or EUR for a few hundreds of currencies.
+
+Exchange rates should be updated at some interval, in the requirements
+it's said to use monthly updating rate, but months are somewhat tricky
+to use since they contain different number of days and February has
+variadic length, and also the requirements might change to update rates
+more often, so assume that rates would be updated at some fixed interval
+in seconds like 4 weeks:
+
+#+begin_src calc :exports both
+4 * 7 * 24 * 60 * 60
+#+end_src
+
+#+RESULTS:
+: 2419200
+
+We can estimate the
 
 Then the process which does currency exchange rates conversion loads
 the whole file in memory.
-
-
-
-#+begin_src sh
-bb '(-> "rates.json" slurp (json/decode true) )'
-#+end_src
-
-
 
 #+begin_src restclient
 :api-key := (getenv "CURRENCYLAYER_API_KEY")
 GET http://api.currencylayer.com/live?access_key=:api-key
 #+end_src
 
-#+RESULTS:
-#+BEGIN_SRC js
-{
-  "success": true,
-  "terms": "https://currencylayer.com/terms",
-  "privacy": "https://currencylayer.com/privacy",
-  "timestamp": 1626436324,
-  "source": "USD",
-  "quotes": {
-    "USDAED": 3.673199,
-    "USDAFN": 79.244164,
-    "USDALL": 103.836898,
-    "USDAMD": 497.898519,
-    "USDANG": 1.795111,
-    "USDAOA": 642.975033,
-    "USDARS": 96.178498,
-    "USDAUD": 1.347898,
-    "USDAWG": 1.8,
-    "USDAZN": 1.699513,
-    "USDBAM": 1.657315,
-    "USDBBD": 2.019235,
-    "USDBDT": 84.810744,
-    "USDBGN": 1.655186,
-    "USDBHD": 0.377015,
-    "USDBIF": 1981.205779,
-    "USDBMD": 1,
-    "USDBND": 1.354874,
-    "USDBOB": 6.905478,
-    "USDBRL": 5.112993,
-    "USDBSD": 1.000042,
-    "USDBTC": 3.2073782e-05,
-    "USDBTN": 74.550046,
-    "USDBWP": 10.96564,
-    "USDBYN": 2.533471,
-    "USDBYR": 19600,
-    "USDBZD": 2.015845,
-    "USDCAD": 1.259295,
-    "USDCDF": 1999.999932,
-    "USDCHF": 0.91958,
-    "USDCLF": 0.027433,
-    "USDCLP": 756.950373,
-    "USDCNY": 6.470701,
-    "USDCOP": 3816.294539,
-    "USDCRC": 619.726306,
-    "USDCUC": 1,
-    "USDCUP": 26.5,
-    "USDCVE": 93.435413,
-    "USDCZK": 21.659796,
-    "USDDJF": 178.041216,
-    "USDDKK": 6.30522,
-    "USDDOP": 57.024107,
-    "USDDZD": 134.851566,
-    "USDEGP": 15.704098,
-    "USDERN": 15.00425,
-    "USDETB": 44.260838,
-    "USDEUR": 0.847655,
-    "USDFJD": 2.078198,
-    "USDFKP": 0.722761,
-    "USDGBP": 0.723985,
-    "USDGEL": 3.134991,
-    "USDGGP": 0.722761,
-    "USDGHS": 5.955581,
-    "USDGIP": 0.722761,
-    "USDGMD": 51.190132,
-    "USDGNF": 9808.917737,
-    "USDGTQ": 7.75054,
-    "USDGYD": 209.227641,
-    "USDHKD": 7.76875,
-    "USDHNL": 23.787654,
-    "USDHRK": 6.354801,
-    "USDHTG": 93.506758,
-    "USDHUF": 304.945006,
-    "USDIDR": 14471.75,
-    "USDILS": 3.28885,
-    "USDIMP": 0.722761,
-    "USDINR": 74.607501,
-    "USDIQD": 1459.102656,
-    "USDIRR": 42104.999634,
-    "USDISK": 123.680038,
-    "USDJEP": 0.722761,
-    "USDJMD": 154.280388,
-    "USDJOD": 0.708995,
-    "USDJPY": 110.162999,
-    "USDKES": 108.210182,
-    "USDKGS": 84.780993,
-    "USDKHR": 4072.416978,
-    "USDKMF": 416.40458,
-    "USDKPW": 900.000006,
-    "USDKRW": 1141.920226,
-    "USDKWD": 0.30072,
-    "USDKYD": 0.833369,
-    "USDKZT": 427.032844,
-    "USDLAK": 9517.845643,
-    "USDLBP": 1512.09592,
-    "USDLKR": 199.018574,
-    "USDLRD": 171.550033,
-    "USDLSL": 14.459687,
-    "USDLTL": 2.95274,
-    "USDLVL": 0.60489,
-    "USDLYD": 4.512253,
-    "USDMAD": 8.954767,
-    "USDMDL": 17.986645,
-    "USDMGA": 3906.266153,
-    "USDMKD": 52.210792,
-    "USDMMK": 1646.153527,
-    "USDMNT": 2848.114569,
-    "USDMOP": 8.002644,
-    "USDMRO": 356.999828,
-    "USDMUR": 42.870302,
-    "USDMVR": 15.40857,
-    "USDMWK": 809.590306,
-    "USDMXN": 19.86945,
-    "USDMYR": 4.209501,
-    "USDMZN": 63.602952,
-    "USDNAD": 14.460169,
-    "USDNGN": 411.789821,
-    "USDNIO": 34.927763,
-    "USDNOK": 8.80662,
-    "USDNPR": 119.280243,
-    "USDNZD": 1.426535,
-    "USDOMR": 0.385023,
-    "USDPAB": 1.000042,
-    "USDPEN": 3.948566,
-    "USDPGK": 3.511537,
-    "USDPHP": 50.265001,
-    "USDPKR": 159.51488,
-    "USDPLN": 3.88704,
-    "USDPYG": 6837.266449,
-    "USDQAR": 3.641014,
-    "USDRON": 4.178099,
-    "USDRSD": 99.616988,
-    "USDRUB": 74.163599,
-    "USDRWF": 1006.905902,
-    "USDSAR": 3.750741,
-    "USDSBD": 8.032175,
-    "USDSCR": 14.343724,
-    "USDSDG": 445.999814,
-    "USDSEK": 8.68076,
-    "USDSGD": 1.35567,
-    "USDSHP": 0.722761,
-    "USDSLL": 10249.999712,
-    "USDSOS": 584.999573,
-    "USDSRD": 21.215501,
-    "USDSTD": 20599.824032,
-    "USDSVC": 8.750583,
-    "USDSYP": 1257.365744,
-    "USDSZL": 14.360971,
-    "USDTHB": 32.776497,
-    "USDTJS": 11.406043,
-    "USDTMT": 3.5,
-    "USDTND": 2.789498,
-    "USDTOP": 2.257103,
-    "USDTRY": 8.52751,
-    "USDTTD": 6.790239,
-    "USDTWD": 27.979499,
-    "USDTZS": 2319.153998,
-    "USDUAH": 27.226299,
-    "USDUGX": 3555.316409,
-    "USDUSD": 1,
-    "USDUYU": 43.857984,
-    "USDUZS": 10626.961665,
-    "USDVEF": 213830222338.07285,
-    "USDVND": 23014.121146,
-    "USDVUV": 110.118701,
-    "USDWST": 2.551656,
-    "USDXAF": 555.843947,
-    "USDXAG": 0.038322,
-    "USDXAU": 0.00055,
-    "USDXCD": 2.70255,
-    "USDXDR": 0.702053,
-    "USDXOF": 555.839237,
-    "USDXPF": 101.325022,
-    "USDYER": 250.303444,
-    "USDZAR": 14.39014,
-    "USDZMK": 9001.202556,
-    "USDZMW": 22.645765,
-    "USDZWL": 322.000239
-  }
-}
-// GET http://api.currencylayer.com/live?access_key=fbc605d8dd59ec4995eec52c8bbefaa0
-// HTTP/1.1 200 OK
-// Date: Fri, 16 Jul 2021 18:07:44 GMT
-// Content-Type: application/json; Charset=UTF-8
-// Transfer-Encoding: chunked
-// Connection: keep-alive
-// x-rate-limit: 1
-// x-rate-limit-remaining: 0
-// x-rate-limit-reset: 1626458865
-// x-apilayer-transaction-id: 97e1e73c-4453-4729-ba10-8f727af66fca
-// access-control-allow-methods: GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS
-// last-modified: Fri, 16 Jul 2021 11:52:04 GMT
-// access-control-allow-origin: *
-// x-request-time: 0.016
-// CF-Cache-Status: DYNAMIC
-// Report-To: {"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v3?s=OJAj5OeUg8%2F4xGeEl3RNtAj39omh98VNYl%2B3YPMh4aUp2mWfQ%2FbA3AYvb%2BwMd1phqytIKe2MwmIq3AJqo8rVGkeGsTAmIhnRxncHT2cPUZhmyB2CtlwsU2P%2Bj0MPONltp6huGiF3nBk%3D"}],"group":"cf-nel","max_age":604800}
-// NEL: {"report_to":"cf-nel","max_age":604800}
-// Server: cloudflare
-// CF-RAY: 66fd2bff4e9efa34-AMS
-// alt-svc: h3-27=":443"; ma=86400, h3-28=":443"; ma=86400, h3-29=":443"; ma=86400, h3=":443"; ma=86400
-// Request duration: 0.315281s
-#+END_SRC
 
-* Commands
+** Commands
 
 See defined tasks:
 #+begin_src sh
 sbt tasks
 #+end_src
+
+
+* Carry out the plan
+
+* Look back

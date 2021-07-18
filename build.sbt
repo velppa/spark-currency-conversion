@@ -6,7 +6,6 @@ scalaVersion := "2.12.14"
 
 //idePackagePrefix := Some("org.example.transaction")
 
-
 val testDependencies = Seq(
   "org.scalactic" %% "scalactic" % "3.2.9",
   "org.scalatest" %% "scalatest" % "3.2.9"
@@ -19,9 +18,12 @@ assembly / assemblyOption ~= {
    .withIncludeDependency(true)
 }
 
+val sparkVersion = "3.1.2"
+
 libraryDependencies ++= Seq(
-  "org.apache.spark" % "spark-sql_2.12" % "3.1.2" % "provided",
-  "org.apache.spark" % "spark-catalyst_2.12" % "3.1.2" % "provided",
+  "org.apache.spark" % "spark-core_2.12" % sparkVersion % "provided",
+  "org.apache.spark" % "spark-sql_2.12" % sparkVersion % "provided",
+  "org.apache.spark" % "spark-catalyst_2.12" % sparkVersion % "provided",
 
   "com.twitter" %% "scalding-args" % "0.17.4",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
@@ -32,7 +34,7 @@ libraryDependencies ++= Seq(
 ThisBuild / assemblyMergeStrategy := {
   case PathList("META-INF", "services", "org.apache.hadoop.fs.FileSystem") => MergeStrategy.filterDistinctLines
   case PathList("META-INF", xs @ _*) => MergeStrategy.discard
-  case PathList("application.conf") => MergeStrategy.discard
+  //case PathList("application.conf") => MergeStrategy.discard
   case "BUILD" => MergeStrategy.discard
   case fileName if fileName.toLowerCase == "reference.conf" => MergeStrategy.concat
   case x => MergeStrategy.last
