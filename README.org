@@ -66,18 +66,60 @@ currency like USD or EUR for a few hundreds of currencies.
 Exchange rates should be updated at some interval, in the requirements
 it's said to use monthly updating rate, but months are somewhat tricky
 to use since they contain different number of days and February has
-variadic length, and also the requirements might change to update rates
-more often, so assume that rates would be updated at some fixed interval
-in seconds like 4 weeks:
+variadic length, and also the requirements might change to update
+rates more often, so assume that rates would be updated at some fixed
+interval in seconds like 4 weeks:
 
 #+begin_src calc :exports both
-4 * 7 * 24 * 60 * 60
+interval_length = 4 * 7 * 24 * 60 * 60
 #+end_src
 
 #+RESULTS:
-: 2419200
+: interval_length = 2419200
 
-We can estimate the
+When loading FX rates at moment T we set rates to be valid for the
+next interval, thus ensuring that for a given transaction exchange
+rate is always available. The following formula is used to get the
+period of validity:
+
+#+begin_src python :results verbatim :exports both
+interval_length = 4 * 7 * 24 * 60 * 60
+t = 1626436324
+div, _ = divmod(t, interval_length)
+return {
+ 'effective_from': (div+1)*interval_length,
+ 'effective_to': (div+2)*interval_length
+}
+#+end_src
+
+#+RESULTS:
+: {'effective_from': 1628121600, 'effective_to': 1630540800}
+
+Let's use CSV format with the following schema:
+
+| column         | datatype |            example | description                                    |
+|----------------+----------+--------------------+------------------------------------------------|
+| currency       | string   |                EUR | target currency                                |
+| rate           | double   | 1.1797252419911401 | FX rate from currency to USD                   |
+| created_at     | int      |         1626436324 | Unix timestamp when the record was inserted    |
+| effective_from | int      |         1628121600 | Unix timestamp of the start period of validity |
+| effective_to   | int      |         1630540800 | Unix timestamp of the end period of validity   |
+
+
+We can estimate the number of records in the rates file:
+
+#+begin_src python :results verbatim :output both
+currencies = 180
+years_of_operation = 50
+interval_length_days = 1/28.0
+records = round(currencies * years_of_operation * 365 * interval_length_days)
+bytes_per_record = 3 + 8
+
+return {"records": records, "bytes": bytes_per_record*records}
+#+end_src
+
+#+RESULTS:
+: {'records': 117321, 'bytes': 1290531}
 
 Then the process which does currency exchange rates conversion loads
 the whole file in memory.
