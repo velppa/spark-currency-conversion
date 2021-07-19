@@ -1,6 +1,6 @@
 #+TITLE: Currency conversion using Spark
 
-* Understanding the problem
+* Understand the problem
 
 The challenge is to convert amount values for incoming incoming
 transactions from transaction's currency to USD.
@@ -181,6 +181,19 @@ brew install java
   I manually downloaded from [[https://www.scala-sbt.org][sbt' website]] and unpacked to =/opt/sbt=
   since the version in brew doesn't support my MacBook M1.
   Add =/opt/sbt/bin= to =PATH=.
+
+** Repository structure
+
+- [[Makefile]] :: contains helper commands to run processing
+- [[src/main/resources/application.conf]] :: contains configuration for applications
+- [[src/main/clojure/rates.clj]] :: contains the code for RatesLoader
+- [[src/main/scala/com/example/transactions/MainJob.scala]] :: contains
+  code for Spark jobs
+- [[transactions.csv]] :: input file with transactions, used by default as input to batch job
+- [[rates.csv]] :: input file with history of FX rates, used by default as
+  input to batch and stream jobs
+- [[results]] :: the default directory where results will be written to
+  (batch to =results/batch=, stream outputs to console at the moment)
 
 ** Rates Loader
 
