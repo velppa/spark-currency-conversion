@@ -39,8 +39,8 @@ subgraph cluster_Rates{
   TransactionsEnriched [shape=cylinder]
   TransactionsTopic [label="TransactionEnrichedStream"]
 
-  TransacrionEnricherBatch [shape=component; color=6]
-  TransacrionEnricherStream [shape=component; color=6]
+  TransactionEnricherBatch [shape=component; color=6]
+  TransactionEnricherStream [shape=component; color=6]
 }
 
 RatesStorage -> RatesLoader [label="previous   "]
@@ -51,9 +51,9 @@ Transactions -> TransactionEnricherBatch
 RatesStorage -> TransactionEnricherBatch
 TransactionEnricherBatch -> TransactionsEnriched
 
-TransactionStream -> TransacrionEnricherStream
-RatesStorage -> TransacrionEnricherStream
-TransacrionEnricherStream -> TransactionsTopic
+TransactionStream -> TransactionEnricherStream
+RatesStorage -> TransactionEnricherStream
+TransactionEnricherStream -> TransactionsTopic
 }
 
 #+end_src
