@@ -1,14 +1,30 @@
 #+TITLE: Currency conversion using Spark
+This repo contains a prototype of a Spark Job which can process the
+data in both batch and streaming modes uning the same business logic.
 
-* Understand the problem
 
-The challenge is to convert amount values for incoming incoming
-transactions from transaction's currency to USD.
+* Table of contents                                                :noexport:
+:PROPERTIES:
+:TOC:      :include siblings :depth 2 :ignore this
+:END:
+:CONTENTS:
+- [[#loading-exchange-rates][Loading exchange rates]]
+- [[#install-dependencies][Install dependencies]]
+- [[#repository-structure][Repository structure]]
+- [[#rates-loader][Rates Loader]]
+- [[#building-and-starting-spark-master][Building and starting Spark Master]]
+- [[#enrichment-logic][Enrichment logic]]
+- [[#batch-processing][Batch processing]]
+- [[#stream-processing][Stream processing]]
+- [[#looking-back][Looking back]]
+:END:
 
-The conversion is a multiplication operation =amount_usd = amount *
-rate_curr_usd=.
 
-There are those constraints to care about:
+Job converts amount values for incoming transactions from
+transaction's currency to USD. The conversion is a multiplication
+operation =amount_usd = amount * rate_curr_usd=.
+
+There are constraints we care about:
 1. Use a monthly updating FX rate based on the timestamp of each
    transaction.
 2. The conversion should work for real-time (<50 ms) as well as batch
@@ -16,9 +32,7 @@ There are those constraints to care about:
 3. The real-time and batch conversion function should be identical,
    i.e. same inputs produce same outputs.
 
-* Create a plan
-
-Obtaining exchange rates from third parties should be independent
+Obtaining exchange rates from third parties is independent
 from using those rates in transaction processing. At this stage
 we ensure the data quality, reshape rates into our internal model
 and establish validity intervals along the time axis.
@@ -63,7 +77,7 @@ TransactionEnricherStream -> TransactionsTopic
 
 Red nodes are in scope of this assignment.
 
-** Loading exchange rates
+* Loading exchange rates
 
 Exchange rates are loaded from an external provider at some infrequent
 schedule (say every month), reshaped to our model and stored somewhere
@@ -146,10 +160,7 @@ but in Go I'd use =map= with =sync.RWMutex{}= and lock the mutex for
 writing when switching.
 
 
-* Carry out the plan
-
-** Install dependencies
-
+* Install dependencies
 - Clojure, refer to [[https://clojure.org/guides/getting_started#_installation_on_mac_via_homebrew][Installation on Mac via Homebrew]]:
 
   #+begin_src sh
@@ -182,8 +193,7 @@ brew install java
   since the version in brew doesn't support my MacBook M1.
   Add =/opt/sbt/bin= to =PATH=.
 
-** Repository structure
-
+* Repository structure
 - [[Makefile]] :: contains helper commands to run processing
 - [[src/main/resources/application.conf]] :: contains configuration for applications
 - [[src/main/clojure/rates.clj]] :: contains the code for RatesLoader
@@ -195,8 +205,7 @@ brew install java
 - [[results]] :: the default directory where results will be written to
   (batch to =results/batch=, stream outputs to console at the moment)
 
-** Rates Loader
-
+* Rates Loader
 It takes previous data and an increment (new rates), transforms
 increment into target schema, filters out from previous data records
 with =effective_from= equals to increment's =effective_from= and
@@ -218,8 +227,7 @@ make load-rates
 I back-filled the history of exchange rates for 40 periods of 28 days
 back from today.
 
-** Building and starting Spark Master
-
+* Building and starting Spark Master
 To build a jar, use:
 
 #+begin_src sh
@@ -232,16 +240,14 @@ To start a Spark Master use:
 spark-shell
 #+end_src
 
-** Enrichment logic
-
+* Enrichment logic
 It takes transactions DataFrame and rates DataFrame and joins them by
 =currency= and =effective_from= columns. The logic is shared between
 bulk and stream processing.
 
 The implementation is provided in =Enricher.withAmountUSD= method.
 
-** Batch processing
-
+* Batch processing
 It takes two files as input, constructs DataFrames out of them and runs
 enrichment and saves results into a file.
 
@@ -251,8 +257,7 @@ To launch the processing:
 make run-batch
 #+end_src
 
-** Stream processing
-
+* Stream processing
 It takes a file with rates as input and a directory where csv files
 will be written, files are processed as a stream.
 
@@ -274,8 +279,7 @@ head -n 50 transactions.csv > stream/4.csv
 
 #+RESULTS:
 
-* Look back
-
+* Looking back
 There are many things missing before the solution is production ready:
 
 - Use a binary file format with embedded schema, like Parquet
