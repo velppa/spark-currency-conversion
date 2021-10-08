@@ -8,6 +8,7 @@ data in both batch and streaming modes uning the same business logic.
 :TOC:      :include siblings :depth 2 :ignore this
 :END:
 :CONTENTS:
+- [[#about][About]]
 - [[#loading-exchange-rates][Loading exchange rates]]
 - [[#install-dependencies][Install dependencies]]
 - [[#repository-structure][Repository structure]]
@@ -19,7 +20,7 @@ data in both batch and streaming modes uning the same business logic.
 - [[#looking-back][Looking back]]
 :END:
 
-
+* About
 Job converts amount values for incoming transactions from
 transaction's currency to USD. The conversion is a multiplication
 operation =amount_usd = amount * rate_curr_usd=.
@@ -75,7 +76,7 @@ TransactionEnricherStream -> TransactionsTopic
 #+RESULTS:
 [[file:assets/flow.svg]]
 
-Red nodes are in scope of this assignment.
+Red nodes are in scope of this repo.
 
 * Loading exchange rates
 
