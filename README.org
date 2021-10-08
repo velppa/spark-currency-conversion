@@ -1,6 +1,6 @@
 #+TITLE: Currency conversion using Spark
 This repo contains a prototype of a Spark Job which can process the
-data in both batch and streaming modes uning the same business logic.
+data in both batch and streaming modes using the same business logic.
 
 
 * Table of contents                                                :noexport:
